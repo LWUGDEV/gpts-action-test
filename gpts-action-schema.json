@@ -1,0 +1,121 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "GPTs Action Test API",
+    "description": "GPTsからJSONデータを受信・保存するためのテストAPI",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://gpts-action-test.onrender.com"
+    }
+  ],
+  "paths": {
+    "/api/receive": {
+      "post": {
+        "operationId": "receiveData",
+        "summary": "GPTsからデータを受信",
+        "description": "GPTsアクションからJSONデータを受信して保存します",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "description": "送信するメッセージ"
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "description": "ユーザーID"
+                  },
+                  "action_type": {
+                    "type": "string",
+                    "description": "アクションの種類",
+                    "enum": ["test", "data_send", "log", "notification"]
+                  },
+                  "data": {
+                    "type": "object",
+                    "description": "追加データ（任意の構造）",
+                    "additionalProperties": true
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "タイムスタンプ"
+                  }
+                },
+                "required": ["message"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "データの受信に成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "description": "処理結果のステータス"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "処理結果のメッセージ"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "処理実行時刻"
+                    },
+                    "received_data": {
+                      "type": "object",
+                      "description": "受信したデータ"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエストエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "エラーメッセージ"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "エラーメッセージ"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
