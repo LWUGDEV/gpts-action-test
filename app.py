@@ -1,9 +1,12 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, send_file, make_response
 from flask_sqlalchemy import SQLAlchemy
 import json
 import datetime
 import os
+import io
 from pathlib import Path
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 
 app = Flask(__name__)
 
@@ -174,6 +177,7 @@ def index():
                 <a href="/workouts" class="button">ワークアウト一覧</a>
                 <a href="/workouts/weekly" class="button">週次サマリ</a>
                 <a href="/workouts/monthly" class="button">月次サマリ</a>
+                <a href="/api/export/excel" class="button" style="background: #28a745;">📊 Excelダウンロード</a>
             </div>
             
             <div class="section">
@@ -466,6 +470,112 @@ def delete_exercise(exercise_id):
         log_event("delete_exercise", error=error_msg, status="error")
         return jsonify({"error": error_msg}), 500
 
+def create_excel_export():
+    """筋トレログをExcel形式で出力"""
+    try:
+        # 全セッションとエクササイズを取得（日付順）
+        sessions = WorkoutSession.query.order_by(WorkoutSession.date.asc()).all()
+        
+        # Excelワークブックを作成
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "筋トレログ"
+        
+        # ヘッダー行の設定（元のExcelファイルと同じ構造）
+        headers = [
+            "日付", "曜日", "施設名", "種目", "種別", 
+            "重量(kg)", "回数(rep)", "レストレップ", "セット数", "部位", "備考"
+        ]
+        
+        # ヘッダースタイル設定
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        
+        # ヘッダー行を設定
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+        
+        # データ行を追加
+        row_num = 2
+        for session in sessions:
+            for exercise in session.workout_logs:
+                # レストレップ回数の表示形式
+                rest_pause_display = ""
+                if exercise.rest_pause_reps and exercise.rest_pause_reps > 0:
+                    rest_pause_display = str(exercise.rest_pause_reps)
+                
+                # データ行
+                data_row = [
+                    session.date.strftime('%Y/%m/%d'),  # 日付
+                    session.day_of_week or "",          # 曜日
+                    session.facility or "",             # 施設名
+                    exercise.exercise_name or "",       # 種目
+                    exercise.exercise_category or "",   # 種別
+                    exercise.weight or "",              # 重量(kg)
+                    exercise.reps or "",                # 回数(rep)
+                    rest_pause_display,                 # レストレップ
+                    exercise.sets or "",                # セット数
+                    exercise.target_muscle or "",       # 部位
+                    exercise.notes or ""                # 備考
+                ]
+                
+                for col_num, value in enumerate(data_row, 1):
+                    ws.cell(row=row_num, column=col_num, value=value)
+                
+                row_num += 1
+        
+        # 列幅の自動調整
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)  # 最大50文字
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Excelファイルをメモリに保存
+        excel_buffer = io.BytesIO()
+        wb.save(excel_buffer)
+        excel_buffer.seek(0)
+        
+        return excel_buffer
+        
+    except Exception as e:
+        raise Exception(f"Excel export error: {str(e)}")
+
+@app.route('/api/export/excel', methods=['GET'])
+def export_excel():
+    """筋トレログをExcelファイルでダウンロード"""
+    try:
+        # Excelファイルを生成
+        excel_buffer = create_excel_export()
+        
+        # ファイル名生成（現在の日時）
+        filename = f"workout_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        # ダウンロード用レスポンスを作成
+        response = make_response(excel_buffer.getvalue())
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        
+        # ログ記録
+        log_event("export_excel", data={"filename": filename})
+        
+        return response
+        
+    except Exception as e:
+        error_msg = str(e)
+        log_event("export_excel", error=error_msg, status="error")
+        return jsonify({"error": error_msg}), 500
+
 @app.route('/workouts')
 def view_workouts():
     """筋トレログの一覧表示"""
@@ -545,6 +655,7 @@ def view_workouts():
                     <a href="/workouts/weekly" class="button">週次サマリ</a>
                     <a href="/workouts/monthly" class="button">月次サマリ</a>
                     <a href="/logs" class="button">システムログ</a>
+                    <a href="/api/export/excel" class="button" style="background: #28a745;">📊 Excelダウンロード</a>
                 </div>
                 
                 <div class="stats">
