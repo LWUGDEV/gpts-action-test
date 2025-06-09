@@ -334,6 +334,138 @@ def save_workout():
         log_event("save_workout", error=error_msg, status="error")
         return jsonify({"error": error_msg}), 500
 
+@app.route('/api/workout/<int:session_id>', methods=['GET'])
+def get_workout_session(session_id):
+    """特定のワークアウトセッションを取得"""
+    try:
+        session = WorkoutSession.query.get_or_404(session_id)
+        
+        session_data = {
+            'id': session.id,
+            'date': session.date.strftime('%Y-%m-%d'),
+            'day_of_week': session.day_of_week,
+            'facility': session.facility,
+            'exercises': []
+        }
+        
+        for log in session.workout_logs:
+            exercise_data = {
+                'id': log.id,
+                'name': log.exercise_name,
+                'category': log.exercise_category,
+                'weight': log.weight,
+                'reps': log.reps,
+                'rest_pause_reps': log.rest_pause_reps,
+                'sets': log.sets,
+                'target_muscle': log.target_muscle,
+                'notes': log.notes
+            }
+            session_data['exercises'].append(exercise_data)
+        
+        return jsonify(session_data), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/workout/<int:session_id>', methods=['DELETE'])
+def delete_workout_session(session_id):
+    """ワークアウトセッションを削除"""
+    try:
+        session = WorkoutSession.query.get_or_404(session_id)
+        
+        # セッション情報をログに記録
+        log_event("delete_workout_session", data={
+            "session_id": session_id,
+            "date": session.date.strftime('%Y-%m-%d'),
+            "exercises_count": len(session.workout_logs)
+        })
+        
+        db.session.delete(session)
+        db.session.commit()
+        
+        return jsonify({
+            "status": "success",
+            "message": "Workout session deleted successfully",
+            "session_id": session_id
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        error_msg = str(e)
+        log_event("delete_workout_session", error=error_msg, status="error")
+        return jsonify({"error": error_msg}), 500
+
+@app.route('/api/workout/exercise/<int:exercise_id>', methods=['PUT'])
+def update_exercise(exercise_id):
+    """個別エクササイズを更新"""
+    try:
+        exercise = WorkoutLog.query.get_or_404(exercise_id)
+        data = request.get_json()
+        
+        if data is None:
+            return jsonify({"error": "No JSON data received"}), 400
+        
+        # フィールドを更新
+        if 'name' in data:
+            exercise.exercise_name = data['name']
+        if 'category' in data:
+            exercise.exercise_category = data['category']
+        if 'weight' in data:
+            exercise.weight = data['weight']
+        if 'reps' in data:
+            exercise.reps = data['reps']
+        if 'rest_pause_reps' in data:
+            exercise.rest_pause_reps = data['rest_pause_reps']
+        if 'sets' in data:
+            exercise.sets = data['sets']
+        if 'target_muscle' in data:
+            exercise.target_muscle = data['target_muscle']
+        if 'notes' in data:
+            exercise.notes = data['notes']
+        
+        db.session.commit()
+        
+        log_event("update_exercise", data={"exercise_id": exercise_id, "updated_fields": list(data.keys())})
+        
+        return jsonify({
+            "status": "success",
+            "message": "Exercise updated successfully",
+            "exercise_id": exercise_id
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        error_msg = str(e)
+        log_event("update_exercise", error=error_msg, status="error")
+        return jsonify({"error": error_msg}), 500
+
+@app.route('/api/workout/exercise/<int:exercise_id>', methods=['DELETE'])
+def delete_exercise(exercise_id):
+    """個別エクササイズを削除"""
+    try:
+        exercise = WorkoutLog.query.get_or_404(exercise_id)
+        
+        log_event("delete_exercise", data={
+            "exercise_id": exercise_id,
+            "exercise_name": exercise.exercise_name,
+            "session_id": exercise.session_id
+        })
+        
+        db.session.delete(exercise)
+        db.session.commit()
+        
+        return jsonify({
+            "status": "success",
+            "message": "Exercise deleted successfully",
+            "exercise_id": exercise_id
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        error_msg = str(e)
+        log_event("delete_exercise", error=error_msg, status="error")
+        return jsonify({"error": error_msg}), 500
+
 @app.route('/workouts')
 def view_workouts():
     """筋トレログの一覧表示"""
@@ -352,6 +484,7 @@ def view_workouts():
             
             for log in session.workout_logs:
                 exercise_data = {
+                    'id': log.id,
                     'name': log.exercise_name,
                     'category': log.exercise_category,
                     'weight': log.weight,
@@ -374,19 +507,26 @@ def view_workouts():
             <style>
                 body { font-family: Arial, sans-serif; margin: 20px; }
                 .container { max-width: 1200px; margin: 0 auto; }
-                .session { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; border-left: 4px solid #4CAF50; }
+                .session { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; border-left: 4px solid #4CAF50; position: relative; }
                 .session-header { background: #f8f9fa; padding: 15px; margin: -20px -20px 15px -20px; border-radius: 8px 8px 0 0; }
                 .session-date { font-size: 1.2em; font-weight: bold; color: #2c3e50; }
                 .session-info { color: #666; margin-top: 5px; }
-                .exercise { margin: 10px 0; padding: 15px; background: #f9f9f9; border-radius: 5px; }
-                .exercise-header { font-weight: bold; color: #34495e; margin-bottom: 8px; }
+                .exercise { margin: 10px 0; padding: 15px; background: #f9f9f9; border-radius: 5px; position: relative; }
+                .exercise-header { font-weight: bold; color: #34495e; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
                 .exercise-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 0.9em; }
                 .detail-item { background: white; padding: 8px; border-radius: 3px; }
                 .detail-label { font-weight: bold; color: #7f8c8d; }
                 .detail-value { color: #2c3e50; }
                 .notes { margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 3px; font-style: italic; }
-                .button { background: #007cba; color: white; padding: 10px 20px; text-decoration: none; border-radius: 3px; display: inline-block; margin: 5px; }
+                .button { background: #007cba; color: white; padding: 10px 20px; text-decoration: none; border-radius: 3px; display: inline-block; margin: 5px; border: none; cursor: pointer; }
                 .button:hover { background: #005a8b; }
+                .button-small { padding: 5px 10px; font-size: 0.8em; margin: 2px; }
+                .button-edit { background: #28a745; }
+                .button-edit:hover { background: #218838; }
+                .button-delete { background: #dc3545; }
+                .button-delete:hover { background: #c82333; }
+                .session-delete { position: absolute; top: 15px; right: 15px; }
+                .exercise-actions { display: flex; gap: 5px; }
                 .reps-display { font-weight: bold; }
                 .rest-pause { color: #e74c3c; }
                 .nav-buttons { margin-bottom: 20px; }
@@ -419,7 +559,8 @@ def view_workouts():
                 </div>
                 
                 {% for session in sessions_data %}
-                <div class="session">
+                <div class="session" id="session-{{ session.id }}">
+                    <button class="button button-small button-delete session-delete" onclick="deleteSession({{ session.id }})">セッション削除</button>
                     <div class="session-header">
                         <div class="session-date">{{ session.date }} ({{ session.day_of_week }})</div>
                         <div class="session-info">
@@ -429,8 +570,14 @@ def view_workouts():
                     </div>
                     
                     {% for exercise in session.exercises %}
-                    <div class="exercise">
-                        <div class="exercise-header">{{ exercise.name }}</div>
+                    <div class="exercise" id="exercise-{{ exercise.id }}">
+                        <div class="exercise-header">
+                            <span>{{ exercise.name }}</span>
+                            <div class="exercise-actions">
+                                <button class="button button-small button-edit" onclick="editExercise({{ exercise.id }})">編集</button>
+                                <button class="button button-small button-delete" onclick="deleteExercise({{ exercise.id }})">削除</button>
+                            </div>
+                        </div>
                         <div class="exercise-details">
                             {% if exercise.category %}
                             <div class="detail-item">
@@ -474,6 +621,76 @@ def view_workouts():
                 <p>まだ筋トレログがありません。</p>
                 {% endfor %}
             </div>
+            
+            <script>
+            function deleteSession(sessionId) {
+                if (confirm('このセッション全体を削除しますか？')) {
+                    fetch(`/api/workout/${sessionId}`, {
+                        method: 'DELETE'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            document.getElementById(`session-${sessionId}`).remove();
+                            alert('セッションを削除しました');
+                            location.reload();
+                        } else {
+                            alert('削除に失敗しました: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        alert('エラーが発生しました: ' + error);
+                    });
+                }
+            }
+            
+            function deleteExercise(exerciseId) {
+                if (confirm('このエクササイズを削除しますか？')) {
+                    fetch(`/api/workout/exercise/${exerciseId}`, {
+                        method: 'DELETE'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            document.getElementById(`exercise-${exerciseId}`).remove();
+                            alert('エクササイズを削除しました');
+                        } else {
+                            alert('削除に失敗しました: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        alert('エラーが発生しました: ' + error);
+                    });
+                }
+            }
+            
+            function editExercise(exerciseId) {
+                const newReps = prompt('新しい回数を入力してください:');
+                if (newReps !== null && newReps !== '') {
+                    const updateData = { reps: parseInt(newReps) };
+                    
+                    fetch(`/api/workout/exercise/${exerciseId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(updateData)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            alert('エクササイズを更新しました');
+                            location.reload();
+                        } else {
+                            alert('更新に失敗しました: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        alert('エラーが発生しました: ' + error);
+                    });
+                }
+            }
+            </script>
         </body>
         </html>
         '''

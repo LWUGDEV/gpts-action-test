@@ -1,0 +1,340 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Workout CRUD API",
+    "description": "筋トレログの作成・読み取り・更新・削除をGPTsから操作するAPI",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://gpts-action-test.onrender.com"
+    }
+  ],
+  "paths": {
+    "/api/workout": {
+      "post": {
+        "operationId": "saveWorkout",
+        "summary": "筋トレログを保存",
+        "description": "1日分の筋トレログをJSONデータとして受信・保存します",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "筋トレログの保存に成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workout/{session_id}": {
+      "get": {
+        "operationId": "getWorkoutSession",
+        "summary": "特定のワークアウトセッションを取得",
+        "description": "指定されたセッションIDのワークアウトデータを取得します",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "セッションID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "セッションデータの取得に成功"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWorkoutSession",
+        "summary": "ワークアウトセッションを削除",
+        "description": "指定されたセッションIDのワークアウトセッション全体を削除します",
+        "parameters": [
+          {
+            "name": "session_id", 
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "削除するセッションID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "セッションの削除に成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workout/exercise/{exercise_id}": {
+      "put": {
+        "operationId": "updateExercise",
+        "summary": "個別エクササイズを更新",
+        "description": "指定されたエクササイズIDのデータを更新します",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path", 
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "更新するエクササイズID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExerciseUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "エクササイズの更新に成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteExercise",
+        "summary": "個別エクササイズを削除",
+        "description": "指定されたエクササイズIDのエクササイズを削除します",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "削除するエクササイズID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "エクササイズの削除に成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "WorkoutRequest": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "トレーニング日（YYYY-MM-DD形式）",
+            "example": "2025-06-09"
+          },
+          "day_of_week": {
+            "type": "string",
+            "description": "曜日",
+            "example": "Sunday"
+          },
+          "facility": {
+            "type": "string",
+            "description": "施設名",
+            "example": "LifeFit"
+          },
+          "exercises": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Exercise"
+            },
+            "description": "エクササイズのリスト"
+          }
+        },
+        "required": ["date", "exercises"]
+      },
+      "Exercise": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "種目名",
+            "example": "ダンベルベンチプレス（フラット）"
+          },
+          "category": {
+            "type": "string",
+            "description": "種目カテゴリ",
+            "example": "ダンベル"
+          },
+          "weight": {
+            "type": "string",
+            "description": "重量",
+            "example": "20kg×2"
+          },
+          "reps": {
+            "type": "integer",
+            "description": "回数",
+            "example": 6
+          },
+          "rest_pause_reps": {
+            "type": "integer",
+            "description": "レストレップ法での追加回数",
+            "example": 3,
+            "default": 0
+          },
+          "sets": {
+            "type": "integer",
+            "description": "セット数",
+            "example": 2
+          },
+          "target_muscle": {
+            "type": "string",
+            "description": "対象筋肉",
+            "example": "大胸筋中部"
+          },
+          "notes": {
+            "type": "string",
+            "description": "備考・メモ",
+            "example": "2セット目やや深め、レストレップで3回追加"
+          }
+        },
+        "required": ["name", "reps", "sets"]
+      },
+      "ExerciseUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "種目名"
+          },
+          "category": {
+            "type": "string", 
+            "description": "種目カテゴリ"
+          },
+          "weight": {
+            "type": "string",
+            "description": "重量"
+          },
+          "reps": {
+            "type": "integer",
+            "description": "回数"
+          },
+          "rest_pause_reps": {
+            "type": "integer",
+            "description": "レストレップ法での追加回数"
+          },
+          "sets": {
+            "type": "integer",
+            "description": "セット数"
+          },
+          "target_muscle": {
+            "type": "string",
+            "description": "対象筋肉"
+          },
+          "notes": {
+            "type": "string",
+            "description": "備考・メモ"
+          }
+        },
+        "description": "更新したいフィールドのみ指定"
+      },
+      "WorkoutResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success"
+          },
+          "message": {
+            "type": "string",
+            "example": "Workout data saved successfully"
+          },
+          "session_id": {
+            "type": "integer",
+            "example": 1
+          },
+          "date": {
+            "type": "string",
+            "example": "2025-06-09"
+          },
+          "exercises_count": {
+            "type": "integer",
+            "example": 5
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UpdateResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success"
+          },
+          "message": {
+            "type": "string",
+            "example": "Exercise updated successfully"
+          },
+          "exercise_id": {
+            "type": "integer",
+            "example": 1
+          }
+        }
+      },
+      "DeleteResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success"
+          },
+          "message": {
+            "type": "string",
+            "example": "Data deleted successfully"
+          }
+        }
+      }
+    }
+  }
+}
