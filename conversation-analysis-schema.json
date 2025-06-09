@@ -1,0 +1,192 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Conversation Analysis API",
+    "description": "会話内容を解析してJSONデータとして送信・保存するAPI",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://gpts-action-test.onrender.com"
+    }
+  ],
+  "paths": {
+    "/api/conversation": {
+      "post": {
+        "operationId": "saveConversation",
+        "summary": "会話データを保存",
+        "description": "会話の内容を解析してJSONデータとして保存します",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "conversation_id": {
+                    "type": "string",
+                    "description": "会話の一意識別子"
+                  },
+                  "user_input": {
+                    "type": "string",
+                    "description": "ユーザーの発言内容"
+                  },
+                  "assistant_response": {
+                    "type": "string",
+                    "description": "アシスタントの回答内容"
+                  },
+                  "conversation_summary": {
+                    "type": "string",
+                    "description": "会話の要約"
+                  },
+                  "key_topics": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "会話の主要トピック"
+                  },
+                  "sentiment": {
+                    "type": "string",
+                    "enum": ["positive", "negative", "neutral"],
+                    "description": "会話の感情傾向"
+                  },
+                  "category": {
+                    "type": "string",
+                    "description": "会話のカテゴリ（質問、相談、雑談など）"
+                  },
+                  "entities": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "エンティティ名"
+                        },
+                        "type": {
+                          "type": "string",
+                          "description": "エンティティの種類（人名、場所、商品名など）"
+                        },
+                        "value": {
+                          "type": "string",
+                          "description": "エンティティの値"
+                        }
+                      }
+                    },
+                    "description": "会話から抽出されたエンティティ"
+                  },
+                  "action_items": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "会話から抽出されたアクションアイテム"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "properties": {
+                      "language": {
+                        "type": "string",
+                        "description": "会話の言語"
+                      },
+                      "word_count": {
+                        "type": "integer",
+                        "description": "会話の総単語数"
+                      },
+                      "duration_estimate": {
+                        "type": "string",
+                        "description": "会話の推定時間"
+                      }
+                    },
+                    "description": "会話のメタデータ"
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "会話の発生時刻"
+                  }
+                },
+                "required": ["user_input", "conversation_summary"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "会話データの保存に成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "conversation_id": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receive": {
+      "post": {
+        "operationId": "receiveData",
+        "summary": "汎用データを受信",
+        "description": "GPTsアクションから汎用JSONデータを受信して保存します",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "description": "送信するメッセージ"
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "description": "ユーザーID"
+                  },
+                  "action_type": {
+                    "type": "string",
+                    "description": "アクションの種類",
+                    "enum": ["test", "data_send", "log", "notification", "conversation"]
+                  },
+                  "data": {
+                    "type": "object",
+                    "description": "追加データ（任意の構造）",
+                    "additionalProperties": true
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "タイムスタンプ"
+                  }
+                },
+                "required": ["message"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "データの受信に成功"
+          }
+        }
+      }
+    }
+  }
+}
