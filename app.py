@@ -177,7 +177,7 @@ def index():
                 <a href="/workouts" class="button">ワークアウト一覧</a>
                 <a href="/workouts/weekly" class="button">週次サマリ</a>
                 <a href="/workouts/monthly" class="button">月次サマリ</a>
-                <a href="/api/export/excel" class="button" style="background: #28a745;">📊 Excelダウンロード</a>
+                <a href="/export" class="button" style="background: #28a745;">📊 Excel エクスポート</a>
             </div>
             
             <div class="section">
@@ -470,11 +470,54 @@ def delete_exercise(exercise_id):
         log_event("delete_exercise", error=error_msg, status="error")
         return jsonify({"error": error_msg}), 500
 
-def create_excel_export():
-    """筋トレログをExcel形式で出力"""
+def create_excel_export(start_date=None, end_date=None, exercise_name=None, target_muscle=None):
+    """筋トレログをExcel形式で出力（フィルタ対応）"""
     try:
-        # 全セッションとエクササイズを取得（日付順）
-        sessions = WorkoutSession.query.order_by(WorkoutSession.date.asc()).all()
+        # クエリを構築
+        query = WorkoutSession.query
+        
+        # 日付フィルタ
+        if start_date:
+            try:
+                start_date_obj = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+                query = query.filter(WorkoutSession.date >= start_date_obj)
+            except ValueError:
+                pass
+        
+        if end_date:
+            try:
+                end_date_obj = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+                query = query.filter(WorkoutSession.date <= end_date_obj)
+            except ValueError:
+                pass
+        
+        # セッションを取得（日付順）
+        sessions = query.order_by(WorkoutSession.date.asc()).all()
+        
+        # エクササイズ名または筋肉部位でフィルタリング（セッション取得後に適用）
+        if exercise_name or target_muscle:
+            filtered_sessions = []
+            for session in sessions:
+                filtered_exercises = []
+                for exercise in session.workout_logs:
+                    include_exercise = True
+                    
+                    if exercise_name and exercise_name.lower() not in exercise.exercise_name.lower():
+                        include_exercise = False
+                    
+                    if target_muscle and target_muscle.lower() not in (exercise.target_muscle or "").lower():
+                        include_exercise = False
+                    
+                    if include_exercise:
+                        filtered_exercises.append(exercise)
+                
+                # フィルタされたエクササイズがある場合のみセッションを含める
+                if filtered_exercises:
+                    # 一時的にworkout_logsを置換
+                    session._filtered_exercises = filtered_exercises
+                    filtered_sessions.append(session)
+            
+            sessions = filtered_sessions
         
         # Excelワークブックを作成
         wb = Workbook()
@@ -502,7 +545,9 @@ def create_excel_export():
         # データ行を追加
         row_num = 2
         for session in sessions:
-            for exercise in session.workout_logs:
+            # フィルタされたエクササイズがある場合はそれを使用、なければ全て
+            exercises = getattr(session, '_filtered_exercises', session.workout_logs)
+            for exercise in exercises:
                 # レストレップ回数の表示形式
                 rest_pause_display = ""
                 if exercise.rest_pause_reps and exercise.rest_pause_reps > 0:
@@ -553,13 +598,38 @@ def create_excel_export():
 
 @app.route('/api/export/excel', methods=['GET'])
 def export_excel():
-    """筋トレログをExcelファイルでダウンロード"""
+    """筋トレログをExcelファイルでダウンロード（フィルタ対応）"""
     try:
-        # Excelファイルを生成
-        excel_buffer = create_excel_export()
+        # クエリパラメータを取得
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        exercise_name = request.args.get('exercise_name')
+        target_muscle = request.args.get('target_muscle')
         
-        # ファイル名生成（現在の日時）
-        filename = f"workout_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        # Excelファイルを生成（フィルタ適用）
+        excel_buffer = create_excel_export(
+            start_date=start_date,
+            end_date=end_date, 
+            exercise_name=exercise_name,
+            target_muscle=target_muscle
+        )
+        
+        # ファイル名生成（フィルタ条件を含む）
+        filename_parts = ["workout_log"]
+        if start_date and end_date:
+            filename_parts.append(f"{start_date}_to_{end_date}")
+        elif start_date:
+            filename_parts.append(f"from_{start_date}")
+        elif end_date:
+            filename_parts.append(f"until_{end_date}")
+        
+        if exercise_name:
+            filename_parts.append(f"exercise_{exercise_name[:10]}")
+        if target_muscle:
+            filename_parts.append(f"muscle_{target_muscle[:10]}")
+            
+        filename_parts.append(datetime.datetime.now().strftime('%Y%m%d_%H%M%S'))
+        filename = "_".join(filename_parts) + ".xlsx"
         
         # ダウンロード用レスポンスを作成
         response = make_response(excel_buffer.getvalue())
@@ -567,7 +637,15 @@ def export_excel():
         response.headers['Content-Disposition'] = f'attachment; filename={filename}'
         
         # ログ記録
-        log_event("export_excel", data={"filename": filename})
+        log_event("export_excel", data={
+            "filename": filename,
+            "filters": {
+                "start_date": start_date,
+                "end_date": end_date,
+                "exercise_name": exercise_name,
+                "target_muscle": target_muscle
+            }
+        })
         
         return response
         
@@ -655,7 +733,7 @@ def view_workouts():
                     <a href="/workouts/weekly" class="button">週次サマリ</a>
                     <a href="/workouts/monthly" class="button">月次サマリ</a>
                     <a href="/logs" class="button">システムログ</a>
-                    <a href="/api/export/excel" class="button" style="background: #28a745;">📊 Excelダウンロード</a>
+                    <a href="/export" class="button" style="background: #28a745;">📊 Excel エクスポート</a>
                 </div>
                 
                 <div class="stats">
@@ -1287,6 +1365,191 @@ def view_conversations():
     </html>
     '''
     return render_template_string(html, conversations=conversations)
+
+@app.route('/export')
+def export_page():
+    """エクスポートページ（フィルター付き）"""
+    try:
+        # ユニークな種目名と筋肉部位を取得
+        unique_exercises = db.session.query(WorkoutLog.exercise_name).distinct().order_by(WorkoutLog.exercise_name).all()
+        unique_muscles = db.session.query(WorkoutLog.target_muscle).filter(WorkoutLog.target_muscle.isnot(None)).distinct().order_by(WorkoutLog.target_muscle).all()
+        
+        exercises = [ex[0] for ex in unique_exercises]
+        muscles = [muscle[0] for muscle in unique_muscles]
+        
+        html = '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Excelエクスポート - 筋トレログ</title>
+            <meta charset="utf-8">
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .container { max-width: 800px; margin: 0 auto; }
+                .filter-section { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                .filter-group { margin: 15px 0; }
+                .filter-label { display: block; font-weight: bold; margin-bottom: 5px; color: #2c3e50; }
+                .filter-input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+                .filter-select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+                .button { background: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 10px 5px; border: none; cursor: pointer; font-size: 16px; }
+                .button:hover { background: #005a8b; }
+                .button-export { background: #28a745; }
+                .button-export:hover { background: #218838; }
+                .button-clear { background: #6c757d; }
+                .button-clear:hover { background: #545b62; }
+                .nav-buttons { margin-bottom: 20px; }
+                .filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+                .info-box { background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2196F3; }
+                .export-options { margin: 20px 0; }
+                .export-preview { background: #fff3e0; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #FF9800; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Excel エクスポート</h1>
+                
+                <div class="nav-buttons">
+                    <a href="/" class="button">← ホームに戻る</a>
+                    <a href="/workouts" class="button">ワークアウト一覧</a>
+                </div>
+                
+                <div class="info-box">
+                    <strong>📊 Excelエクスポート機能</strong><br>
+                    筋トレログをExcelファイルでダウンロードできます。日付、種目、筋肉部位でフィルタリングできます。
+                </div>
+                
+                <form id="exportForm" class="filter-section">
+                    <h3>フィルター条件</h3>
+                    
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <label class="filter-label">開始日</label>
+                            <input type="date" id="start_date" name="start_date" class="filter-input">
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">終了日</label>
+                            <input type="date" id="end_date" name="end_date" class="filter-input">
+                        </div>
+                    </div>
+                    
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <label class="filter-label">種目名（部分一致）</label>
+                            <select id="exercise_name" name="exercise_name" class="filter-select">
+                                <option value="">すべての種目</option>
+                                {% for exercise in exercises %}
+                                <option value="{{ exercise }}">{{ exercise }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">筋肉部位（部分一致）</label>
+                            <select id="target_muscle" name="target_muscle" class="filter-select">
+                                <option value="">すべての部位</option>
+                                {% for muscle in muscles %}
+                                <option value="{{ muscle }}">{{ muscle }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="export-options">
+                        <button type="button" onclick="exportExcel()" class="button button-export">📊 Excelダウンロード</button>
+                        <button type="button" onclick="clearFilters()" class="button button-clear">フィルタークリア</button>
+                        <button type="button" onclick="previewData()" class="button">プレビュー</button>
+                    </div>
+                </form>
+                
+                <div class="export-preview" id="previewSection" style="display: none;">
+                    <h4>プレビュー</h4>
+                    <div id="previewContent"></div>
+                </div>
+                
+                <div class="info-box">
+                    <strong>使用方法：</strong><br>
+                    1. フィルター条件を設定（空白の場合は全データ）<br>
+                    2. 「プレビュー」で結果を確認（オプション）<br>
+                    3. 「Excelダウンロード」でファイルを取得
+                </div>
+            </div>
+            
+            <script>
+            function exportExcel() {
+                const form = document.getElementById('exportForm');
+                const formData = new FormData(form);
+                
+                // クエリパラメータを構築
+                const params = new URLSearchParams();
+                for (let [key, value] of formData.entries()) {
+                    if (value) {
+                        params.append(key, value);
+                    }
+                }
+                
+                // Excelダウンロード用URLを構築
+                const downloadUrl = '/api/export/excel?' + params.toString();
+                
+                // ダウンロードを開始
+                window.location.href = downloadUrl;
+            }
+            
+            function clearFilters() {
+                document.getElementById('start_date').value = '';
+                document.getElementById('end_date').value = '';
+                document.getElementById('exercise_name').value = '';
+                document.getElementById('target_muscle').value = '';
+                document.getElementById('previewSection').style.display = 'none';
+            }
+            
+            function previewData() {
+                const form = document.getElementById('exportForm');
+                const formData = new FormData(form);
+                
+                // フィルター条件を表示
+                let previewText = 'フィルター条件:<br>';
+                
+                const startDate = formData.get('start_date');
+                const endDate = formData.get('end_date');
+                const exerciseName = formData.get('exercise_name');
+                const targetMuscle = formData.get('target_muscle');
+                
+                if (startDate) previewText += `・ 開始日: ${startDate}<br>`;
+                if (endDate) previewText += `・ 終了日: ${endDate}<br>`;
+                if (exerciseName) previewText += `・ 種目名: ${exerciseName}<br>`;
+                if (targetMuscle) previewText += `・ 筋肉部位: ${targetMuscle}<br>`;
+                
+                if (!startDate && !endDate && !exerciseName && !targetMuscle) {
+                    previewText += '・ フィルターなし（全データ）<br>';
+                }
+                
+                document.getElementById('previewContent').innerHTML = previewText;
+                document.getElementById('previewSection').style.display = 'block';
+            }
+            
+            // ページ読み込み時にデフォルト日付を設定（オプション）
+            document.addEventListener('DOMContentLoaded', function() {
+                // 今日の日付を取得
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+                
+                // 30日前の日付を計算
+                const thirtyDaysAgo = new Date(today);
+                thirtyDaysAgo.setDate(today.getDate() - 30);
+                const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+                
+                // デフォルトで過去30日を設定しない（ユーザーが手動で設定）
+                // document.getElementById('start_date').value = thirtyDaysAgoStr;
+                // document.getElementById('end_date').value = todayStr;
+            });
+            </script>
+        </body>
+        </html>
+        '''
+        
+        return render_template_string(html, exercises=exercises, muscles=muscles)
+        
+    except Exception as e:
+        return f"エラーが発生しました: {str(e)}", 500
 
 def create_tables():
     """データベーステーブルを作成"""
