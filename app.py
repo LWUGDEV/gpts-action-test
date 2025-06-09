@@ -960,16 +960,15 @@ def view_conversations():
     '''
     return render_template_string(html, conversations=conversations)
 
-@app.before_first_request
 def create_tables():
-    """初回リクエスト時にテーブルを作成"""
-    db.create_all()
-
-if __name__ == '__main__':
-    # データベーステーブルの作成
+    """データベーステーブルを作成"""
     with app.app_context():
         db.create_all()
-    
+
+# アプリケーション起動時にテーブル作成
+create_tables()
+
+if __name__ == '__main__':
     log_event("app_start", data={"message": "Application started"})
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
